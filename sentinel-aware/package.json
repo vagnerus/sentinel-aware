@@ -12,6 +12,7 @@
     "express": "^4.18.2",
     "form-data": "^4.0.5",
     "node-telegram-bot-api": "^0.67.0",
+    "pg": "^8.21.0",
     "socket.io": "^4.7.2",
     "user-agent-parser": "^0.6.0",
     "web-push": "^3.6.7"
