@@ -899,9 +899,12 @@
         }
         
         loadData().catch(err => console.error('[DASHBOARD] Initial load failed:', err));
+        
+        // AGGRESSIVE POLLING (Essential for Vercel)
+        // Since WebSockets are unstable on Serverless, we poll the DB every 3 seconds
         setInterval(() => {
-            loadData().catch(err => console.error('[DASHBOARD] Interval load failed:', err));
-        }, 5000);
+            loadData().catch(err => {});
+        }, 3000);
     </script>
 </body>
 </html>
