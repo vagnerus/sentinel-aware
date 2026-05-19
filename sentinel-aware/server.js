@@ -102,6 +102,11 @@ async function loadInitialData() {
 
 async function initDB() {
     try {
+        console.log('[DB] Tentando conectar ao PostgreSQL...');
+        const client = await pool.connect();
+        console.log('[DB] Conexão estabelecida.');
+        client.release();
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, data JSONB NOT NULL);
             CREATE TABLE IF NOT EXISTS logs (id TEXT PRIMARY KEY, data JSONB NOT NULL);
@@ -110,7 +115,8 @@ async function initDB() {
         console.log('[DB] Tabelas prontas');
         await loadInitialData();
     } catch (err) {
-        console.error('[DB] Erro ao inicializar:', err.message);
+        console.error('[DB] ❌ Erro Crítico:', err.message);
+        sendTelegramMsg(`❌ *ERRO DE BANCO DE DADOS*\n${err.message}`);
     }
 }
 initDB();
@@ -239,8 +245,9 @@ app.get('/api/links', (req, res) => res.json(links));
 app.delete('/api/logs', async (req, res) => { logs = []; await pool.query('DELETE FROM logs'); res.json({ success: true }); });
 
 const PORT = process.env.PORT || 3000;
-if (!isProd) {
-    server.listen(PORT, () => console.log(`🚀 Dashboard: http://localhost:${PORT}`));
-}
+server.listen(PORT, () => {
+    console.log(`[SERVER] SentinelAware rodando na porta ${PORT}`);
+    sendTelegramMsg(`🚀 *SERVIDOR INICIADO*\nHost: \`${process.env.VERCEL_URL || 'Local'}\`\nPorta: \`${PORT}\``);
+});
 
 module.exports = app;
