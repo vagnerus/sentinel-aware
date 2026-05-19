@@ -1,0 +1,19 @@
+{
+  "name": "sentinel-aware",
+  "version": "1.0.0",
+  "description": "Security Awareness Demo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2",
+    "form-data": "^4.0.5",
+    "node-telegram-bot-api": "^0.67.0",
+    "socket.io": "^4.7.2",
+    "user-agent-parser": "^0.6.0",
+    "web-push": "^3.6.7"
+  }
+}
