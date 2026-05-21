@@ -149,6 +149,15 @@
         /* Main Content */
         .main-content { padding: 30px; overflow-y: auto; }
 
+        #links-list {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 8px;
+            border: 1px solid rgba(0, 210, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
         .glass-card { 
             background: var(--card-bg);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -530,33 +539,36 @@
             }
             
             if (!linksData || !Array.isArray(linksData) || linksData.length === 0) {
-                c.innerHTML = '<div style="opacity:0.5; text-align:center; font-size:0.65rem;">Nenhum link gerado ainda.</div>';
+                c.innerHTML = '<div style="opacity:0.5; text-align:center; font-size:0.65rem; padding:20px;">Nenhum link gerado ainda.</div>';
                 return;
             }
             
             try {
                 const fullUrl = (l) => `${window.location.origin}${l.url}`;
-                c.innerHTML = linksData.slice(0, 5).map(l => {
+                const html = linksData.slice(0, 10).map((l, idx) => {
                     const template = (l.template || 'microsoft').toUpperCase();
                     const url = fullUrl(l);
                     const clicks = l.clicks || 0;
+                    const safeUrl = url.replace(/'/g, "\\'");
                     return `
                 <div style="background:rgba(255,255,255,0.08); border:1px solid rgba(0,210,255,0.2); padding:12px; border-radius:8px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                         <div style="flex:1; min-width:0;">
                             <div style="font-size:0.65rem; color:var(--primary); font-weight:bold;">${template}</div>
-                            <div style="font-size:0.6rem; color:#aaa; margin-top:3px; word-break:break-all; font-family:monospace;">${url}</div>
+                            <div style="font-size:0.55rem; color:#aaa; margin-top:3px; word-break:break-all; font-family:monospace; max-width:220px;">${url}</div>
                         </div>
-                        <button onclick="copy('${url.replace(/'/g, "\\'")}')" style="background:var(--primary); border:none; padding:6px 10px; border-radius:5px; font-size:0.55rem; font-weight:bold; cursor:pointer; white-space:nowrap; flex-shrink:0;">COPY</button>
+                        <button onclick="copy('${safeUrl}')" style="background:var(--primary); border:none; padding:6px 10px; border-radius:5px; font-size:0.55rem; font-weight:bold; cursor:pointer; white-space:nowrap; flex-shrink:0; color:#000;">COPY</button>
                     </div>
-                    <div style="font-size:0.55rem; color:#666;">📊 ${clicks} cliques</div>
+                    <div style="font-size:0.55rem; color:#666;">📊 ${clicks} clicks</div>
                 </div>
                     `;
                 }).join('');
-                console.log('[DASHBOARD] Links renderizados com sucesso');
+                
+                c.innerHTML = html;
+                console.log(`[DASHBOARD] ${linksData.length} links renderizados (mostrando até 10)`);
             } catch (e) {
                 console.error('[DASHBOARD] Erro ao renderizar links:', e);
-                c.innerHTML = `<div style="opacity:0.5; text-align:center; font-size:0.65rem; color:red;">❌ ERRO ao renderizar: ${e.message}</div>`;
+                c.innerHTML = `<div style="opacity:0.5; text-align:center; font-size:0.65rem; color:red; padding:20px;">❌ ERRO ao renderizar: ${e.message}</div>`;
             }
         }
 
