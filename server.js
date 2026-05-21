@@ -156,7 +156,7 @@ async function initDB() {
             console.error('[DB] PostgreSQL Failed, switching to JSON:', err.message);
             useJSON = true;
             loadJSON();
-            sendTelegramMsg(`⚠️ *AVISO DB:* PostgreSQL falhou (${err.message}). Usando JSON local.`);
+            sendTelegramMsg(`⚠️ *AVISO DB:* PostgreSQL falhou!\n❌ Erro: \`${err.message}\`\nℹ️ O sistema está usando o arquivo JSON local.`);
         }
     } else {
         console.log('[DB] No DB_HOST found, using JSON local.');
@@ -416,3 +416,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) server.listen(PORT);
 module.exports = app;
+orts = app;
