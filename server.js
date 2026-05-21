@@ -328,16 +328,37 @@ app.get('/api/links', async (req, res) => {
             const { rows } = await pool.query('SELECT data FROM links');
             links = rows.map(r => r.data);
         }
-        res.json(links.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-    } catch (e) { res.json([]); }
+        const sorted = links.sort((a, b) => {
+            const dateA = new Date(b.createdAt || 0);
+            const dateB = new Date(a.createdAt || 0);
+            return dateA - dateB;
+        });
+        console.log('[API] GET /api/links retornando', sorted.length, 'links');
+        res.json(sorted);
+    } catch (e) { 
+        console.error('[API] Error in GET /api/links:', e.message);
+        res.json([]); 
+    }
 });
 
 app.post('/api/links', async (req, res) => {
-    const id = Math.random().toString(36).substring(2, 10);
-    const newLink = { id, url: `/t/${id}`, template: req.body.template || 'microsoft', createdAt: new Date(), clicks: 0 };
-    await saveLink(newLink);
-    io.emit('new_link_created', newLink);
-    res.json(newLink);
+    try {
+        const id = Math.random().toString(36).substring(2, 10);
+        const newLink = { 
+            id, 
+            url: `/t/${id}`, 
+            template: req.body.template || 'microsoft', 
+            createdAt: new Date(), 
+            clicks: 0 
+        };
+        await saveLink(newLink);
+        console.log('[API] POST /api/links criou novo link:', id);
+        if (io) io.emit('new_link_created', newLink);
+        res.json(newLink);
+    } catch (e) {
+        console.error('[API] Error in POST /api/links:', e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/api/vapid-public-key', async (req, res) => {

