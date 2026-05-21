@@ -581,7 +581,7 @@
                 }).join('');
                 
                 c.innerHTML = html;
-                const childCount = c.querySelectorAll('> div').length;
+                const childCount = c.children.length;
                 console.log(`[DASHBOARD] ${linksData.length} links renderizados (${childCount} divs visíveis)`);
                 console.log('[DASHBOARD] Container agora tem', c.children.length, 'filhos');
                 console.log('[DASHBOARD] Primeiro filho:', c.children[0]?.outerHTML?.substring(0, 100));
