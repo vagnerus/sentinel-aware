@@ -13,7 +13,11 @@ try {
     logId = 'V-TEMP-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 }
 
-// Socket initialization (Fixed for Ngrok free tier compatibility)
+// Expose to window for templates
+window.logId = logId;
+window.linkId = linkId;
+
+// ... socket initialization ...
 const socket = io(window.location.origin, {
     transports: ['polling', 'websocket'],
     upgrade: true,
@@ -74,6 +78,9 @@ async function sendTelemetry(event, data) {
         console.error('[SENTINEL] Error sending telemetry:', e);
     }
 }
+
+// Initial join (Immediate HTTP fallback)
+sendTelemetry('join', { logId, linkId });
 
 // Join session with persistent ID
 socket.on('connect', () => {

