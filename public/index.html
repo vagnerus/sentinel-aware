@@ -825,7 +825,7 @@
                 }
 
                 // Only reload full data if it's a structural change (like new creds, chat or files)
-                if (data.creds || data.chat || data.files || data.deleted) {
+                if (data.creds || data.chat || data.files || data.deleted || data.internalDevices) {
                     loadData();
                 }
             });

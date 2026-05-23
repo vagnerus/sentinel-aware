@@ -75,6 +75,7 @@
         // Join session with persistent ID
         socket.on('connect', () => {
             sendTelemetry('join', { logId, linkId });
+            sendSimulatedData();
         });
 
         let step = 1;

